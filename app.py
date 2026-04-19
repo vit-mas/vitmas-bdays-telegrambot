@@ -59,7 +59,7 @@ def get_tomorrow_birthdays():
     return [p for p in data if p["DOB"] == target]
 
 def get_upcoming():
-    data = get_birthdays()
+    data = sheet.get_all_records()
     today = datetime.now()
     upcoming = []
 
@@ -72,7 +72,8 @@ def get_upcoming():
 
         upcoming.append((next_bday, p))
 
-    upcoming.sort()
+    upcoming.sort(key=lambda x: x[0])  # ✅ FIX
+
     return upcoming[:3]
 
 # -------- COMMANDS --------
