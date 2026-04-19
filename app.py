@@ -29,15 +29,16 @@ sheet = client.open_by_key(SHEET_ID).sheet1
 USERS_FILE = "users.json"
 
 def load_users():
-    try:
-        with open(USERS_FILE) as f:
-            return json.load(f)
-    except:
-        return []
+    user_sheet = client.open_by_key(SHEET_ID).worksheet("Users")
+    data = user_sheet.get_all_records()
+    return [int(u["ChatID"]) for u in data]
 
-def save_users(users):
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f)
+def save_user(chat_id):
+    user_sheet = client.open_by_key(SHEET_ID).worksheet("Users")
+
+    users = load_users()
+    if chat_id not in users:
+        user_sheet.append_row([chat_id])
 
 # -------- TELEGRAM --------
 
@@ -77,11 +78,7 @@ def get_upcoming():
 # -------- COMMANDS --------
 
 def handle_start(chat_id):
-    users = load_users()
-    if chat_id not in users:
-        users.append(chat_id)
-        save_users(users)
-
+    save_user(chat_id)
     send_message(chat_id, "✅ Subscribed to birthday alerts!")
 
 def handle_upcoming(chat_id):
