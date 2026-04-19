@@ -3,7 +3,7 @@
 A sophisticated Telegram bot that automatically sends birthday reminders by fetching birthday data from Google Sheets. Built for the VITMAS club at VIT Vellore to celebrate member birthdays.
 
 ## Accesing the bot on Telegram
-Search for @vitmas_bday_bot[https://t.me/vitmas_bday_bot] on telegram and click on start to subscrive to this service.
+Search for [@vitmas_bday_bot](https://t.me/vitmas_bday_bot) on telegram and click on start to subscrive to this service.
 /upcoming will send upcoming 3 Birthdays
 
 -> New functions will be added soon
