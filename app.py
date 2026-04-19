@@ -1,18 +1,32 @@
 from flask import Flask, request
 import requests
+import os
 import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# -------- GOOGLE SHEETS SETUP --------
+
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+
+SHEET_ID = os.environ.get("SHEET_ID")
+sheet = client.open_by_key(SHEET_ID).sheet1
+
+# -------- USER STORAGE (TEMP IN-MEMORY OR FILE) --------
 USERS_FILE = "users.json"
-BIRTHDAYS_FILE = "birthdays.json"
-
-
-# ------------------ HELPERS ------------------
 
 def load_users():
     try:
@@ -25,59 +39,61 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
-def load_birthdays():
-    with open(BIRTHDAYS_FILE) as f:
-        return json.load(f)
+# -------- TELEGRAM --------
 
 def send_message(chat_id, text):
     url = f"{BASE_URL}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
 
+# -------- LOGIC --------
 
-# ------------------ COMMANDS ------------------
+def get_birthdays():
+    return sheet.get_all_records()
+
+def get_tomorrow_birthdays():
+    data = get_birthdays()
+    tomorrow = datetime.now() + timedelta(days=1)
+    target = tomorrow.strftime("%d/%m")
+
+    return [p for p in data if p["DOB"] == target]
+
+def get_upcoming():
+    data = get_birthdays()
+    today = datetime.now()
+    upcoming = []
+
+    for p in data:
+        day, month = map(int, p["DOB"].split("/"))
+        next_bday = datetime(today.year, month, day)
+
+        if next_bday < today:
+            next_bday = datetime(today.year + 1, month, day)
+
+        upcoming.append((next_bday, p))
+
+    upcoming.sort()
+    return upcoming[:3]
+
+# -------- COMMANDS --------
 
 def handle_start(chat_id):
     users = load_users()
-
     if chat_id not in users:
         users.append(chat_id)
         save_users(users)
 
-    send_message(chat_id, "✅ You will now receive birthday alerts!")
-
-def handle_stop(chat_id):
-    users = load_users()
-    users = [u for u in users if u != chat_id]
-    save_users(users)
-
-    send_message(chat_id, "❌ You will no longer receive alerts.")
+    send_message(chat_id, "✅ Subscribed to birthday alerts!")
 
 def handle_upcoming(chat_id):
-    birthdays = load_birthdays()
-
-    today = datetime.now()
-
-    upcoming = []
-    for b in birthdays:
-        dob = datetime.strptime(b["dob"], "%Y-%m-%d")
-        next_bday = dob.replace(year=today.year)
-
-        if next_bday < today:
-            next_bday = next_bday.replace(year=today.year + 1)
-
-        upcoming.append((next_bday, b))
-
-    upcoming.sort()
+    upcoming = get_upcoming()
 
     msg = "🎂 Upcoming Birthdays:\n\n"
-    for i in range(min(3, len(upcoming))):
-        date, person = upcoming[i]
-        msg += f"{i+1}. {person['name']} - {date.strftime('%b %d')}\n"
+    for i, (date, p) in enumerate(upcoming):
+        msg += f"{i+1}. {p['Name']} - {date.strftime('%b %d')}\n"
 
     send_message(chat_id, msg)
 
-
-# ------------------ WEBHOOK ------------------
+# -------- WEBHOOK --------
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -86,50 +102,37 @@ def webhook():
     if "message" not in data:
         return "ok"
 
-    message = data["message"]
-    chat_id = message["chat"]["id"]
-    text = message.get("text", "")
+    msg = data["message"]
+    chat_id = msg["chat"]["id"]
+    text = msg.get("text", "")
 
     if text == "/start":
         handle_start(chat_id)
-    elif text == "/stop":
-        handle_stop(chat_id)
     elif text == "/upcoming":
         handle_upcoming(chat_id)
 
     return "ok"
 
-
-# ------------------ CRON ENDPOINT ------------------
+# -------- CRON ENDPOINT --------
 
 @app.route("/send-birthday-alert", methods=["GET"])
-def send_birthday_alert():
+def send_alert():
     users = load_users()
-    birthdays = load_birthdays()
-
-    tomorrow = datetime.now() + timedelta(days=1)
-
-    matches = []
-    for b in birthdays:
-        dob = datetime.strptime(b["dob"], "%Y-%m-%d")
-
-        if dob.day == tomorrow.day and dob.month == tomorrow.month:
-            matches.append(b)
+    matches = get_tomorrow_birthdays()
 
     if not matches:
         return "No birthdays"
 
     msg = "🎉 Tomorrow's Birthdays:\n\n"
     for p in matches:
-        msg += f"- {p['name']} ({p['phone']})\n"
+        msg += f"- {p['Name']} ({p['Phone']})\n"
 
-    for user in users:
-        send_message(user, msg)
+    for u in users:
+        send_message(u, msg)
 
     return "Sent"
 
-
-# ------------------ RUN ------------------
+# -------- RUN --------
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

@@ -1,4 +1,5 @@
 flask
 requests
-python-dateutil
+gspread
+oauth2client
 gunicorn
