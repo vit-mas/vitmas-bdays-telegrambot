@@ -7,6 +7,11 @@ from birthday_logic import get_tomorrow_birthdays
 
 routes = Blueprint('routes', __name__)
 
+@routes.route("/uptimerobot", methods=["GET"])
+def uptimerobot():
+    """Lightweight endpoint for UptimeRobot monitoring."""
+    return {"status": "alive"}, 200
+
 @routes.route("/webhook", methods=["POST"])
 def webhook():
     """Handle incoming Telegram messages."""
