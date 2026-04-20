@@ -29,17 +29,20 @@ def webhook():
 @routes.route("/send-birthday-alert", methods=["GET"])
 def send_alert():
     """Cron endpoint to send birthday alerts for tomorrow's birthdays."""
-    users = load_users()
-    matches = get_tomorrow_birthdays()
+    try:
+        users = load_users()
+        matches = get_tomorrow_birthdays()
 
-    if not matches:
-        return "No birthdays"
+        if not matches:
+            return {"status": "success", "message": "No birthdays"}, 200
 
-    msg = "🎉 Tomorrow's Birthdays:\n\n"
-    for p in matches:
-        msg += f"- {p['Name']} ({p['Phone']})\n"
+        msg = "🎉 Tomorrow's Birthdays:\n\n"
+        for p in matches:
+            msg += f"- {p['Name']} ({p['Phone']})\n"
 
-    for u in users:
-        send_message(u, msg)
+        for u in users:
+            send_message(u, msg)
 
-    return "Sent"
+        return {"status": "success", "message": "Sent", "count": len(matches)}, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)[:100]}, 500
